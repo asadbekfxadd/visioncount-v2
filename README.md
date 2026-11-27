@@ -124,3 +124,10 @@ cd ai-service && pip install -r requirements.txt && python -m app.main
 
 Нужны локально запущенные PostgreSQL и Redis (или оставьте их в docker-compose и
 поднимайте только эти два сервиса: `docker compose up postgres redis`).
+
+## Безопасность (аудит)
+- WebSocket (`/ws/dashboard`, `/ws/cameras/{id}`) требуют JWT (`?token=`) и отдают события только своей компании.
+- В production (`APP_ENV=production` или Railway) сервис не стартует с `SECRET_KEY`/`FERNET_KEY` по умолчанию, а демо-пользователь `owner@visioncount.uz / demo1234` не создаётся (если не задан `DEMO_MODE=true`).
+- Ключ ai-service можно отделить от JWT-ключа: `SERVICE_KEY` (на обеих сторонах).
+- Вход: не более 10 неудачных попыток за 15 минут на email и на адрес; роль нового пользователя не может быть выше роли создающего.
+- Тесты: `cd backend && pip install pytest pytest-asyncio httpx aiosqlite && TEST_DATABASE_URL=postgresql+asyncpg://user:pass@host/db pytest tests`. Копия `cloud/` синхронизирована с `backend/` и `frontend/`.
