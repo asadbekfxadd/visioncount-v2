@@ -1,3 +1,4 @@
+import hmac
 from datetime import datetime, timezone
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -7,13 +8,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.models import AnalyticsEvent, Camera, CameraStatus, EventType
+from app.models.models import AnalyticsEvent, Branch, Camera, CameraStatus, EventType
 from app.schemas.schemas import EventIngest
 from app.services.ws_manager import manager
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 _fernet = Fernet(settings.FERNET_KEY.encode())
+
+
+def _check_service_key(key: str | None) -> None:
+    if not key or not hmac.compare_digest(key.encode(), settings.service_key.encode()):
+        raise HTTPException(status_code=401, detail="Invalid service key")
 
 
 def _decrypt(value: str | None) -> str | None:
@@ -32,8 +38,7 @@ async def internal_list_cameras(
 ):
     """Trusted service-to-service endpoint the ai-service polls on startup (and
     periodically) to learn which cameras exist and should get a pipeline worker."""
-    if x_service_key != settings.SECRET_KEY:
-        raise HTTPException(status_code=401, detail="Invalid service key")
+    _check_service_key(x_service_key)
 
     rows = (await db.execute(select(Camera))).scalars().all()
     return [
@@ -55,8 +60,7 @@ async def ingest_event(
 ):
     """Called by the ai-service pipeline for every ENTRY/EXIT crossing it detects
     (or synthesizes in Demo Mode). Not exposed to end users."""
-    if x_service_key != settings.SECRET_KEY:
-        raise HTTPException(status_code=401, detail="Invalid service key")
+    _check_service_key(x_service_key)
 
     camera = (await db.execute(select(Camera).where(Camera.id == payload.camera_id))).scalar_one_or_none()
     if not camera:
@@ -83,7 +87,8 @@ async def ingest_event(
         "track_id": payload.track_id,
         "timestamp": event.timestamp.isoformat(),
     }
-    await manager.broadcast("dashboard", message)
+    company_id = (await db.execute(select(Branch.company_id).where(Branch.id == camera.branch_id))).scalar_one()
+    await manager.broadcast(f"dashboard:{company_id}", message)
     await manager.broadcast(f"camera:{camera.id}", message)
 
     return {"ok": True}

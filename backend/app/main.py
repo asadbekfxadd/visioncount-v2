@@ -17,10 +17,12 @@ limiter = Limiter(key_func=get_remote_address)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.check_production()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    async with AsyncSessionLocal() as session:
-        await seed_demo_data(session)
+    if settings.demo_enabled:  # демо-пользователь с известным паролем — только вне production или при DEMO_MODE=true
+        async with AsyncSessionLocal() as session:
+            await seed_demo_data(session)
     yield
 
 

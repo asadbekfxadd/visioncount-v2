@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import HTTPException, APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,11 @@ async def invite_user(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_role(UserRole.ADMIN)),
 ):
+    from app.deps import ROLE_RANK
+    if ROLE_RANK[payload.role] > ROLE_RANK[user.role]:
+        raise HTTPException(status_code=403, detail="Нельзя назначить роль выше своей")
+    if (await db.execute(select(User.id).where(User.email == payload.email))).first():
+        raise HTTPException(status_code=409, detail="Пользователь с таким email уже есть")
     new_user = User(
         company_id=user.company_id, email=payload.email, full_name=payload.full_name,
         hashed_password=hash_password(payload.password), role=payload.role,

@@ -19,7 +19,9 @@ export function useWebSocket(path: string, onMessage: (data: any) => void) {
     let closedByClient = false;
 
     function connect() {
-      socket = new WebSocket(`${WS_URL}${path}`);
+      // WebSocket не умеет заголовки — JWT передаём параметром; без входа канал закрывается сервером
+      const token = localStorage.getItem("vc_token") || "";
+      socket = new WebSocket(`${WS_URL}${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`);
 
       socket.onmessage = (event) => {
         try {
